@@ -22,45 +22,17 @@ export const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
     }
   };
 
-  const handleTestLogin = () => {
-    setEmail('test@crawlx.com');
-    setPassword('test123');
-  };
 
   return (
     <div className="w-full max-w-md space-y-8">
       <div className="text-center">
-        <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-          Welcome to CrawlX
+        <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-200 to-purple-400 bg-clip-text text-transparent">
+          Welcome to Crawley
         </h2>
         <p className="text-muted-foreground mt-2">Sign in to your account</p>
       </div>
 
-      {/* Test Credentials Banner */}
-      <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-sm rounded-xl p-4 border border-blue-500/20">
-        <div className="flex items-center gap-2 mb-2">
-          <TestTube className="w-4 h-4 text-blue-400" />
-          <span className="text-sm font-medium text-blue-400">Test Credentials</span>
-        </div>
-        <p className="text-xs text-slate-500 mb-3">Use these credentials to test the application:</p>
-        <div className="space-y-1 text-xs">
-          <div className="flex justify-between">
-            <span className="text-slate-400">Email:</span>
-            <span className="text-white font-mono">test@crawlx.com</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Password:</span>
-            <span className="text-white font-mono">test123</span>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleTestLogin}
-          className="mt-3 w-full text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg py-2 transition-colors"
-        >
-          Fill Test Credentials
-        </button>
-      </div>
+     
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
