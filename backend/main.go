@@ -17,7 +17,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/net/html"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -65,11 +64,14 @@ type BrokenLink struct {
 // Database connection
 var db *gorm.DB
 
-// JWT secret key - should be loaded from environment
+// JWT secret key
 var jwtSecret []byte
 
 // Job cancellation channels
 var jobCancellations = make(map[uint]chan bool)
+
+// Crawler service
+var crawlerService *CrawlerService
 
 // Initialize database
 func initDB() {
@@ -101,23 +103,11 @@ func initDB() {
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
+
+	// Initialize crawler service
+	crawlerService = NewCrawlerService(db)
 }
 
-func CORSMiddleware() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:8080")
-        c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-        c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-        c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
-
-        if c.Request.Method == "OPTIONS" {
-            c.AbortWithStatus(204)
-            return
-        }
-
-        c.Next()
-    }
-}
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -346,8 +336,8 @@ func startCrawl(c *gin.Context) {
 	cancelChan := make(chan bool, 1)
 	jobCancellations[job.ID] = cancelChan
 
-	// Start crawling in a goroutine
-	go crawlURL(&job, cancelChan)
+	// Start crawling using the crawler service
+	go crawlerService.CrawlURL(&job, cancelChan)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Crawl started"})
 }
@@ -557,287 +547,18 @@ func rerunCrawlJobs(c *gin.Context) {
 	})
 }
 
-// Web crawling logic
-func crawlURL(job *CrawlJob, cancelChan <-chan bool) {
-	defer func() {
-		// Clean up cancellation channel
-		delete(jobCancellations, job.ID)
-	}()
-
-	// Update job status to running
-	now := time.Now()
-	db.Model(job).Updates(CrawlJob{
-		Status:    "running",
-		StartedAt: &now,
-	})
-
-	// Perform the actual crawling
-	result, err := performCrawl(job.URL, cancelChan)
-	if err != nil {
-		// Check if it was cancelled
-		completed := time.Now()
-		status := "error"
-		
-		select {
-		case <-cancelChan:
-			status = "stopped"
-		default:
-		}
-
-		db.Model(job).Updates(CrawlJob{
-			Status:       status,
-			ErrorMessage: err.Error(),
-			CompletedAt:  &completed,
-		})
-		return
-	}
-
-	// Check if cancelled before updating results
-	select {
-	case <-cancelChan:
-		completed := time.Now()
-		db.Model(job).Updates(CrawlJob{
-			Status:      "stopped",
-			CompletedAt: &completed,
-		})
-		return
-	default:
-	}
-
-	// Update job with results
-	completed := time.Now()
-	updates := CrawlJob{
-		Status:        "completed",
-		CompletedAt:   &completed,
-		HTMLVersion:   result.HTMLVersion,
-		PageTitle:     result.PageTitle,
-		H1Count:       result.H1Count,
-		H2Count:       result.H2Count,
-		H3Count:       result.H3Count,
-		H4Count:       result.H4Count,
-		H5Count:       result.H5Count,
-		H6Count:       result.H6Count,
-		InternalLinks: result.InternalLinks,
-		ExternalLinks: result.ExternalLinks,
-		BrokenLinks:   len(result.BrokenLinks),
-		HasLoginForm:  result.HasLoginForm,
-	}
-
-	db.Model(job).Updates(updates)
-
-	// Store broken links
-	for _, link := range result.BrokenLinks {
-		brokenLink := BrokenLink{
-			CrawlJobID: job.ID,
-			URL:        link.URL,
-			StatusCode: link.StatusCode,
-		}
-		db.Create(&brokenLink)
-	}
-}
-
-type CrawlResult struct {
-	HTMLVersion   string
-	PageTitle     string
-	H1Count       int
-	H2Count       int
-	H3Count       int
-	H4Count       int
-	H5Count       int
-	H6Count       int
-	InternalLinks int
-	ExternalLinks int
-	BrokenLinks   []struct {
-		URL        string
-		StatusCode int
-	}
-	HasLoginForm bool
-}
-
-func performCrawl(targetURL string, cancelChan <-chan bool) (*CrawlResult, error) {
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	// Check for cancellation
-	select {
-	case <-cancelChan:
-		return nil, fmt.Errorf("crawl cancelled")
-	default:
-	}
-
-	// Fetch the page
-	resp, err := client.Get(targetURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch URL: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP error: %d", resp.StatusCode)
-	}
-
-	// Parse HTML
-	doc, err := html.Parse(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %v", err)
-	}
-
-	result := &CrawlResult{}
-
-	// Extract information with cancellation support
-	if err := extractInfo(doc, result, targetURL, cancelChan); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func extractInfo(n *html.Node, result *CrawlResult, baseURL string, cancelChan <-chan bool) error {
-	// Check for cancellation periodically
-	select {
-	case <-cancelChan:
-		return fmt.Errorf("crawl cancelled")
-	default:
-	}
-
-	if n.Type == html.ElementNode {
-		switch n.Data {
-		case "html":
-			// Extract HTML version from DOCTYPE or attributes
-			for _, attr := range n.Attr {
-				if attr.Key == "version" {
-					result.HTMLVersion = attr.Val
-				}
-			}
-			if result.HTMLVersion == "" {
-				result.HTMLVersion = "HTML5" // Default assumption
-			}
-		case "title":
-			if n.FirstChild != nil {
-				result.PageTitle = strings.TrimSpace(n.FirstChild.Data)
-			}
-		case "h1":
-			result.H1Count++
-		case "h2":
-			result.H2Count++
-		case "h3":
-			result.H3Count++
-		case "h4":
-			result.H4Count++
-		case "h5":
-			result.H5Count++
-		case "h6":
-			result.H6Count++
-		case "a":
-			// Process links
-			for _, attr := range n.Attr {
-				if attr.Key == "href" {
-					processLink(attr.Val, baseURL, result)
-				}
-			}
-		case "form":
-			// Check for login form
-			if hasLoginForm(n) {
-				result.HasLoginForm = true
-			}
-		}
-	}
-
-	// Recursively process child nodes
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if err := extractInfo(c, result, baseURL, cancelChan); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func processLink(href, baseURL string, result *CrawlResult) {
-	// Skip empty hrefs and javascript/mailto links
-	if href == "" || strings.HasPrefix(href, "javascript:") || strings.HasPrefix(href, "mailto:") {
-		return
-	}
-
-	// Parse base URL
-	base, err := url.Parse(baseURL)
-	if err != nil {
-		return
-	}
-
-	// Parse href
-	link, err := url.Parse(href)
-	if err != nil {
-		return
-	}
-
-	// Resolve relative URLs
-	resolved := base.ResolveReference(link)
-
-	// Check if internal or external
-	if resolved.Host == base.Host {
-		result.InternalLinks++
-	} else {
-		result.ExternalLinks++
-	}
-
-	// Check if link is broken (simplified check)
-	if isLinkBroken(resolved.String()) {
-		result.BrokenLinks = append(result.BrokenLinks, struct {
-			URL        string
-			StatusCode int
-		}{
-			URL:        resolved.String(),
-			StatusCode: 404, // Simplified - in real implementation, get actual status
-		})
-	}
-}
-
-func isLinkBroken(linkURL string) bool {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Head(linkURL)
-	if err != nil {
-		return true
-	}
-	defer resp.Body.Close()
-
-	return resp.StatusCode >= 400
-}
-
-func hasLoginForm(n *html.Node) bool {
-	// Look for password input fields
-	return containsPasswordInput(n)
-}
-
-func containsPasswordInput(n *html.Node) bool {
-	if n.Type == html.ElementNode && n.Data == "input" {
-		for _, attr := range n.Attr {
-			if attr.Key == "type" && attr.Val == "password" {
-				return true
-			}
-		}
-	}
-
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if containsPasswordInput(c) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func LoggerMiddleware() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        log.Printf("Request: %s %s", c.Request.Method, c.Request.URL.Path)
-        c.Next()
-        log.Printf("Response: %d", c.Writer.Status())
-    }
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		duration := time.Since(start)
+		log.Printf("[%s] %s %s - %d (%v)", 
+			c.ClientIP(), 
+			c.Request.Method, 
+			c.Request.URL.Path, 
+			c.Writer.Status(), 
+			duration)
+	}
 }
 
 func main() {
@@ -850,9 +571,9 @@ func main() {
 	// Add logging middleware first
 	r.Use(LoggerMiddleware())
 
-	// CORS middleware - Use ONLY ONE of these approaches
+	// CORS middleware
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8080", "https://localhost:8080"}, // React dev server
+		AllowOrigins:     []string{"http://localhost:8080", "https://localhost:8080"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-API-Key"},
 		ExposeHeaders:    []string{"Content-Length"},
