@@ -87,7 +87,7 @@ DB_NAME=webcrawler
 # Server Configuration
 PORT=8080
 
-# JWT Secret (change this in production!)
+# JWT Secret
 JWT_SECRET=a429e0d0d6574d4d47340de00918792c
 ```
 
@@ -205,49 +205,10 @@ Run tests with:
 make test
 ```
 
-
-
-### Key Components
-
-1. **HTTP Server**: Gin framework handling REST API endpoints
-2. **Authentication**: JWT tokens and API key validation
-3. **Web Crawler**: HTML parsing and link analysis
-4. **Database**: MySQL with GORM ORM
-5. **Background Jobs**: Goroutines for async crawling
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
 ## License
 
 This project is licensed under the MIT License.
 
-## Troubleshooting
-
-### Common Issues
-
-1. **Database Connection Failed**
-   - Check MySQL is running
-   - Verify credentials in .env
-   - Ensure database exists
-
-2. **Port Already in Use**
-   - Change PORT in .env
-   - Check for running processes: `lsof -i :8080`
-
-3. **Dependencies Issues**
-   - Run `go mod tidy`
-   - Check Go version (requires 1.21+)
-
-4. **Docker Issues**
-   - Ensure Docker is running
-   - Check Docker Compose version
-   - Try `docker-compose down && docker-compose up --build`
 
 ### Logs
 

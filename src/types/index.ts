@@ -1,7 +1,7 @@
 // types.ts
 
 export interface URLAnalysis {
-  id?: string | number;
+  id?:  number;
   user_id: number;
   url: string;
   status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
@@ -38,7 +38,7 @@ export interface PaginationParams {
   sortOrder?: 'asc' | 'desc';
   search?: string;
   status?: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
-  filters?: string;
+  filters?: { status: string };
 }
 
 export interface PaginationInfo {

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
+
 import { useState, useEffect } from "react";
 import { URLInput } from "../components/URLInput";
 import { AnalysisTable } from "../components/AnalysisTable";
@@ -10,7 +10,7 @@ import { ArrowLeft, Settings, Loader2, Pause, Play } from "lucide-react";
 
 const Index = () => {
   const [currentView, setCurrentView] = useState<"list" | "details">("list");
-  const [selectedAnalysisId, setSelectedAnalysisId] = useState("");
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState(null);
   const [showPollingSettings, setShowPollingSettings] = useState(false);
 
   const {
@@ -57,7 +57,7 @@ const Index = () => {
     fetchAnalyses(params);
   };
 
-  const handleViewDetails = (id: string) => {
+  const handleViewDetails = (id: number) => {
     setSelectedAnalysisId(id);
     setCurrentView("details");
   };
@@ -69,14 +69,14 @@ const Index = () => {
 
   const handleBulkAction = async (
     action: "delete" | "rerun",
-    ids: string[]
+    ids: number[]
   ) => {
     try {
       if (action === "delete") {
-        //@ts-ignore
+      
         await deleteAnalyses(ids);
       } else if (action === "rerun") {
-        //@ts-ignore
+       
         await rerunAnalyses(ids);
       }
     } catch (error) {

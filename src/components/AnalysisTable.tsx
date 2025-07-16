@@ -27,8 +27,8 @@ interface AnalysisTableProps {
     totalPages: number;
   };
   onPageChange: (params: PaginationParams) => void;
-  onViewDetails: (id: string) => void;
-  onBulkAction: (action: "delete" | "rerun", ids: string[]) => void;
+  onViewDetails: (id: number) => void;
+  onBulkAction: (action: "delete" | "rerun", ids: number[]) => void;
   onStartCrawl: (id: number) => void;
   onStopCrawl: (id: number) => void;
 }
@@ -101,7 +101,7 @@ export const AnalysisTable = ({
     }
   };
 
-  const handleSelectRow = (id: string) => {
+  const handleSelectRow = (id: number) => {
     setSelectedIds((prev) =>
       prev.includes(id)
         ? prev.filter((selectedId) => selectedId !== id)
@@ -109,7 +109,7 @@ export const AnalysisTable = ({
     );
   };
 
-  const handleStartCrawl = async (id: string | number) => {
+  const handleStartCrawl = async (id: number) => {
     setActionLoading((prev) => ({ ...prev, [id]: true }));
     try {
       await onStartCrawl(id);

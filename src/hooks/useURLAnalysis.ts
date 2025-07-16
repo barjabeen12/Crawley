@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { URLAnalysis, PaginationParams, APIResponse } from '../types';
 
@@ -177,7 +176,7 @@ export const useURLAnalysis = () => {
       // Auto-start crawl if enabled
       if (autoStart) {
         try {
-          //@ts-expect-error
+        
           await startCrawl(newAnalysis.id);
         } catch (startError) {
           console.warn('Failed to auto-start crawl:', startError);
@@ -260,7 +259,7 @@ export const useURLAnalysis = () => {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to delete analyses');
       }
-       //@ts-expect-error
+ 
       setAnalyses(prev => prev.filter(analysis => !ids.includes(analysis.id)));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete analyses');
@@ -288,7 +287,6 @@ export const useURLAnalysis = () => {
 
       setAnalyses(prev => 
         prev.map(analysis => 
-          //@ts-expect-error
           ids.includes(analysis.id) 
             ? { ...analysis, status: 'queued' }
             : analysis
