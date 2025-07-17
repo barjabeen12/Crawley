@@ -37,7 +37,7 @@ A Go-based web crawler API that analyzes websites and extracts key information i
    ```bash
    make docker-up
    ```
-4. The API will be available at `http://localhost:8080`
+4. The API will be available at `http://localhost:8081`
 
 ### Option 2: Local Development
 
