@@ -33,11 +33,7 @@ A Go-based web crawler API that analyzes websites and extracts key information i
 ### Option 1: Docker Setup (Recommended)
 
 1. Clone the repository
-2. Copy environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-3. Start services:
+2. Start services:
    ```bash
    make docker-up
    ```
@@ -59,13 +55,8 @@ A Go-based web crawler API that analyzes websites and extracts key information i
    mysql -u root -p webcrawler < init.sql
    ```
 
-3. **Configure Environment**
-   ```bash
-   # Copy and edit .env file
-   cp .env.example .env
-   ```
 
-4. **Run the Application**
+3. **Run the Application**
    ```bash
    make run
    # or
