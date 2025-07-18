@@ -23,10 +23,13 @@ import (
 
 // Models
 type User struct {
-	ID       uint   `gorm:"primaryKey" json:"id"`
-	Username string `gorm:"unique;not null" json:"username"`
-	Password string `gorm:"not null" json:"-"`
-	APIKey   string `gorm:"unique;not null" json:"api_key"`
+	ID          uint   `gorm:"primaryKey" json:"id"`
+	Username    string `gorm:"unique;not null" json:"username"`
+	Password    string `gorm:"not null" json:"-"`
+	APIKey      string `gorm:"unique;not null" json:"api_key"`
+	FirstName   string `gorm:"type:varchar(100);default:''" json:"first_name"`
+	LastName    string `gorm:"type:varchar(100);default:''" json:"last_name"`
+	Subscription string `gorm:"type:varchar(50);default:'Free'" json:"subscription"`
 	gorm.Model
 }
 
@@ -50,6 +53,15 @@ type CrawlJob struct {
 	ErrorMessage    string     `json:"error_message,omitempty"`
 	StartedAt       *time.Time `json:"started_at"`
 	CompletedAt     *time.Time `json:"completed_at"`
+	MetaTitle       string     `gorm:"type:text" json:"meta_title"`
+	MetaDescription string     `gorm:"type:text" json:"meta_description"`
+	Canonical       string     `gorm:"type:text" json:"canonical"`
+	HasJSONLD       bool       `json:"has_jsonld"`
+	HasMicrodata    bool       `json:"has_microdata"`
+	HasRDFa         bool       `json:"has_rdfa"`
+	JSONLDSnippet   string     `json:"jsonld_snippet"`
+	MicrodataSnippet string    `json:"microdata_snippet"`
+	RDFaSnippet     string     `json:"rdfa_snippet"`
 	gorm.Model
 }
 
@@ -59,6 +71,13 @@ type BrokenLink struct {
 	URL        string `gorm:"not null" json:"url"`
 	StatusCode int    `json:"status_code"`
 	gorm.Model
+}
+
+type InternalLink struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	FromJobID uint      `gorm:"not null" json:"from_job_id"`
+	ToURL     string    `gorm:"not null" json:"to_url"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Database connection
@@ -99,7 +118,7 @@ func initDB() {
 	}
 
 	// Auto-migrate the schema
-	err = db.AutoMigrate(&User{}, &CrawlJob{}, &BrokenLink{})
+	err = db.AutoMigrate(&User{}, &CrawlJob{}, &BrokenLink{}, &InternalLink{})
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
@@ -196,8 +215,10 @@ func authMiddleware() gin.HandlerFunc {
 // Auth handlers
 func register(c *gin.Context) {
 	var req struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
+		Username     string `json:"username" binding:"required"`
+		Password     string `json:"password" binding:"required"`
+		FirstName    string `json:"firstName"`
+		LastName     string `json:"lastName"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -219,9 +240,12 @@ func register(c *gin.Context) {
 	}
 
 	user := User{
-		Username: req.Username,
-		Password: hashedPassword,
-		APIKey:   generateAPIKey(),
+		Username:     req.Username,
+		Password:     hashedPassword,
+		APIKey:       generateAPIKey(),
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		Subscription: "Free",
 	}
 
 	if err := db.Create(&user).Error; err != nil {
@@ -232,6 +256,13 @@ func register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "User created successfully",
 		"api_key": user.APIKey,
+		"user": gin.H{
+			"id": user.ID,
+			"email": user.Username,
+			"firstName": user.FirstName,
+			"lastName": user.LastName,
+			"subscription": user.Subscription,
+		},
 	})
 }
 
@@ -277,6 +308,13 @@ func login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"token":   tokenString,
 		"api_key": user.APIKey,
+		"user": gin.H{
+			"id": user.ID,
+			"email": user.Username,
+			"firstName": user.FirstName,
+			"lastName": user.LastName,
+			"subscription": user.Subscription,
+		},
 	})
 }
 
@@ -535,6 +573,9 @@ func rerunCrawlJobs(c *gin.Context) {
 			ExternalLinks: 0,
 			BrokenLinks:   0,
 			HasLoginForm:  false,
+			MetaTitle:     "",
+			MetaDescription: "",
+			Canonical:     "",
 		})
 
 		// Delete old broken links

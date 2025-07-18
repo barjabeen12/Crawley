@@ -23,18 +23,29 @@ type CrawlerService struct {
 
 // CrawlResult represents the result of a crawl operation
 type CrawlResult struct {
-	HTMLVersion   string
-	PageTitle     string
-	H1Count       int
-	H2Count       int
-	H3Count       int
-	H4Count       int
-	H5Count       int
-	H6Count       int
-	InternalLinks int
-	ExternalLinks int
-	BrokenLinks   []BrokenLinkInfo
-	HasLoginForm  bool
+	HTMLVersion      string
+	PageTitle        string
+	Title            string
+	H1Count          int
+	H2Count          int
+	H3Count          int
+	H4Count          int
+	H5Count          int
+	H6Count          int
+	InternalLinks    int
+	ExternalLinks    int
+	BrokenLinks      []BrokenLinkInfo
+	HasLoginForm     bool
+	MetaTitle        string
+	MetaDescription  string
+	Canonical        string
+	ImagesMissingAlt []string
+	HasJSONLD        bool
+	HasMicrodata     bool
+	HasRDFa          bool
+	JSONLDSnippet    string
+	MicrodataSnippet string
+	RDFaSnippet      string
 }
 
 // BrokenLinkInfo contains information about broken links
@@ -77,9 +88,9 @@ func (cs *CrawlerService) CrawlURL(job *CrawlJob, cancelChan <-chan bool) {
 
 	// Update job status to running
 	now := time.Now()
-	cs.db.Model(job).Updates(CrawlJob{
-		Status:    "running",
-		StartedAt: &now,
+	cs.db.Model(job).Updates(map[string]interface{}{
+		"status":     "running",
+		"started_at": &now,
 	})
 
 	log.Printf("Starting crawl for URL: %s (Job ID: %d)", job.URL, job.ID)
@@ -99,10 +110,10 @@ func (cs *CrawlerService) CrawlURL(job *CrawlJob, cancelChan <-chan bool) {
 			log.Printf("Crawl failed for URL: %s (Job ID: %d) - Error: %v", job.URL, job.ID, err)
 		}
 
-		cs.db.Model(job).Updates(CrawlJob{
-			Status:       status,
-			ErrorMessage: err.Error(),
-			CompletedAt:  &completed,
+		cs.db.Model(job).Updates(map[string]interface{}{
+			"status":        status,
+			"error_message": err.Error(),
+			"completed_at":  &completed,
 		})
 		return
 	}
@@ -111,32 +122,41 @@ func (cs *CrawlerService) CrawlURL(job *CrawlJob, cancelChan <-chan bool) {
 	select {
 	case <-cancelChan:
 		completed := time.Now()
-		cs.db.Model(job).Updates(CrawlJob{
-			Status:      "stopped",
-			CompletedAt: &completed,
+		cs.db.Model(job).Updates(map[string]interface{}{
+			"status":       "stopped",
+			"completed_at": &completed,
 		})
 		log.Printf("Crawl cancelled before saving results for URL: %s (Job ID: %d)", job.URL, job.ID)
 		return
 	default:
 	}
 
-	// Update job with results
+	// Update job with results - using map to avoid field name issues
 	completed := time.Now()
-	updates := CrawlJob{
-		Status:        "completed",
-		CompletedAt:   &completed,
-		HTMLVersion:   result.HTMLVersion,
-		PageTitle:     result.PageTitle,
-		H1Count:       result.H1Count,
-		H2Count:       result.H2Count,
-		H3Count:       result.H3Count,
-		H4Count:       result.H4Count,
-		H5Count:       result.H5Count,
-		H6Count:       result.H6Count,
-		InternalLinks: result.InternalLinks,
-		ExternalLinks: result.ExternalLinks,
-		BrokenLinks:   len(result.BrokenLinks),
-		HasLoginForm:  result.HasLoginForm,
+	updates := map[string]interface{}{
+		"status":         "completed",
+		"completed_at":   &completed,
+		"html_version":   result.HTMLVersion,
+		"page_title":     result.PageTitle,
+		"h1_count":       result.H1Count,
+		"h2_count":       result.H2Count,
+		"h3_count":       result.H3Count,
+		"h4_count":       result.H4Count,
+		"h5_count":       result.H5Count,
+		"h6_count":       result.H6Count,
+		"internal_links": result.InternalLinks,
+		"external_links": result.ExternalLinks,
+		"broken_links":   len(result.BrokenLinks),
+		"has_login_form": result.HasLoginForm,
+		"meta_title":     result.MetaTitle,
+		"meta_description": result.MetaDescription,
+		"canonical":      result.Canonical,
+		"has_jsonld": result.HasJSONLD,
+		"has_microdata": result.HasMicrodata,
+		"has_rdfa": result.HasRDFa,
+		"jsonld_snippet": result.JSONLDSnippet,
+		"microdata_snippet": result.MicrodataSnippet,
+		"rdfa_snippet": result.RDFaSnippet,
 	}
 
 	cs.db.Model(job).Updates(updates)
@@ -149,6 +169,33 @@ func (cs *CrawlerService) CrawlURL(job *CrawlJob, cancelChan <-chan bool) {
 			StatusCode: link.StatusCode,
 		}
 		cs.db.Create(&brokenLink)
+	}
+
+	// --- Store all discovered internal links for this job ---
+	// Delete old internal links for this job
+	cs.db.Where("from_job_id = ?", job.ID).Delete(&InternalLink{})
+	// Save new internal links
+	links := cs.extractLinksFromURL(job.URL)
+	for _, l := range links {
+		if l.IsInternal {
+			cs.db.Create(&InternalLink{
+				FromJobID: job.ID,
+				ToURL:     l.URL,
+			})
+		}
+	}
+
+	// --- Orphan/Inbound Internal Link Detection (accurate) ---
+	var allJobs []CrawlJob
+	cs.db.Where("user_id = ?", job.UserID).Find(&allJobs)
+	for _, j := range allJobs {
+		var inboundCount int64
+		cs.db.Model(&InternalLink{}).Where("to_url = ? AND from_job_id != ?", j.URL, j.ID).Count(&inboundCount)
+		isOrphan := inboundCount == 0
+		cs.db.Model(&CrawlJob{}).Where("id = ?", j.ID).Updates(map[string]interface{}{
+			"inbound_internal_links": inboundCount,
+			"is_orphan": isOrphan,
+		})
 	}
 
 	log.Printf("Crawl completed for URL: %s (Job ID: %d) - Title: %s, Internal: %d, External: %d, Broken: %d", 
@@ -204,7 +251,7 @@ func (cs *CrawlerService) performCrawl(targetURL string, cancelChan <-chan bool)
 
 	// Check for login form
 	result.HasLoginForm = cs.hasLoginForm(doc)
-
+	log.Printf("[DEBUG] result: %s", result)
 	return result, nil
 }
 
@@ -215,6 +262,132 @@ func (cs *CrawlerService) extractBasicInfo(doc *html.Node, result *CrawlResult, 
 
 	// Extract page title and heading counts
 	cs.extractTitleAndHeadings(doc, result)
+
+	// Initialize fields
+	var metaTitle, metaDescription, canonical string
+	var imagesMissingAlt []string
+	var hasJSONLD, hasMicrodata, hasRDFa bool
+	var jsonldSnippet, microdataSnippet, rdfaSnippet string
+
+	// Traverse the DOM
+	cs.traverseNode(doc, func(n *html.Node) {
+		if n.Type != html.ElementNode {
+			return
+		}
+
+		// Build attribute map for convenience
+		attrs := make(map[string]string)
+		for _, attr := range n.Attr {
+			attrs[strings.ToLower(attr.Key)] = attr.Val
+		}
+
+		switch n.Data {
+		case "title":
+			// Extract title tag content
+			if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
+				result.Title = strings.TrimSpace(n.FirstChild.Data)
+			}
+		case "meta":
+			name := strings.ToLower(attrs["name"])
+			property := strings.ToLower(attrs["property"])
+			content := attrs["content"]
+
+			// Prioritize OG tags over standard ones
+			if property == "og:description" {
+				metaDescription = content
+			} else if name == "description" && metaDescription == "" {
+				metaDescription = content
+			}
+
+			if property == "og:title" {
+				metaTitle = content
+			} else if name == "title" && metaTitle == "" {
+				metaTitle = content
+			}
+
+		case "link":
+			rel := strings.ToLower(attrs["rel"])
+			href := attrs["href"]
+
+			if strings.Contains(rel, "canonical") {
+				canonical = href
+			}
+
+		case "img":
+			src := attrs["src"]
+			alt := strings.TrimSpace(attrs["alt"])
+
+			// Fallback to srcset
+			if src == "" {
+				srcset := attrs["srcset"]
+				if srcset != "" {
+					parts := strings.Split(srcset, " ")
+					if len(parts) > 0 {
+						src = parts[0]
+					}
+				}
+			}
+
+			if alt == "" && src != "" {
+				imagesMissingAlt = append(imagesMissingAlt, src)
+			}
+		}
+		// JSON-LD
+		if n.Data == "script" && strings.ToLower(attrs["type"]) == "application/ld+json" {
+			hasJSONLD = true
+			if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
+				jsonldSnippet = n.FirstChild.Data
+			}
+		}
+		// Microdata
+		if _, ok := attrs["itemscope"]; ok {
+			hasMicrodata = true
+			microdataSnippet = renderNodeSnippet(n)
+		}
+		if _, ok := attrs["itemtype"]; ok {
+			hasMicrodata = true
+			microdataSnippet = renderNodeSnippet(n)
+		}
+		if _, ok := attrs["itemprop"]; ok {
+			hasMicrodata = true
+			microdataSnippet = renderNodeSnippet(n)
+		}
+		// RDFa
+		if _, ok := attrs["vocab"]; ok {
+			hasRDFa = true
+			rdfaSnippet = renderNodeSnippet(n)
+		}
+		if _, ok := attrs["typeof"]; ok {
+			hasRDFa = true
+			rdfaSnippet = renderNodeSnippet(n)
+		}
+		if _, ok := attrs["property"]; ok {
+			hasRDFa = true
+			rdfaSnippet = renderNodeSnippet(n)
+		}
+	})
+
+	// Assign results
+	result.MetaTitle = metaTitle
+	result.MetaDescription = metaDescription
+	result.Canonical = canonical
+	result.ImagesMissingAlt = imagesMissingAlt
+	result.HasJSONLD = hasJSONLD
+	result.HasMicrodata = hasMicrodata
+	result.HasRDFa = hasRDFa
+	if len(jsonldSnippet) > 500 { jsonldSnippet = jsonldSnippet[:500] + "..." }
+	if len(microdataSnippet) > 500 { microdataSnippet = microdataSnippet[:500] + "..." }
+	if len(rdfaSnippet) > 500 { rdfaSnippet = rdfaSnippet[:500] + "..." }
+	result.JSONLDSnippet = jsonldSnippet
+	result.MicrodataSnippet = microdataSnippet
+	result.RDFaSnippet = rdfaSnippet
+
+	// Debug logging
+	log.Printf("[DEBUG] Title: %s", result.Title)
+	log.Printf("[DEBUG] MetaTitle: %s", metaTitle)
+	log.Printf("[DEBUG] MetaDescription: %s", metaDescription)
+	log.Printf("[DEBUG] Canonical: %s", canonical)
+	log.Printf("[DEBUG] ImagesMissingAlt: %v", imagesMissingAlt)
 }
 
 // detectHTMLVersion detects the HTML version from the document
@@ -417,8 +590,8 @@ func (cs *CrawlerService) analyzeLinks(links []LinkInfo, result *CrawlResult, ca
 }
 
 // checkLinkStatus checks the HTTP status of a link
-func (cs *CrawlerService) checkLinkStatus(url string) (int, error) {
-	req, err := http.NewRequest("HEAD", url, nil)
+func (cs *CrawlerService) checkLinkStatus(linkURL string) (int, error) {
+	req, err := http.NewRequest("HEAD", linkURL, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -436,7 +609,7 @@ func (cs *CrawlerService) checkLinkStatus(url string) (int, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		// If HEAD fails, try GET
-		req, err = http.NewRequest("GET", url, nil)
+		req, err = http.NewRequest("GET", linkURL, nil)
 		if err != nil {
 			return 0, err
 		}
@@ -520,4 +693,37 @@ func (cs *CrawlerService) traverseNode(n *html.Node, fn func(*html.Node)) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		cs.traverseNode(c, fn)
 	}
+}
+
+// Add helper to extract links for a given URL (re-crawl the page)
+func (cs *CrawlerService) extractLinksFromURL(targetURL string) []LinkInfo {
+	// Fetch the page
+	resp, err := cs.client.Get(targetURL)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+	doc, err := html.Parse(strings.NewReader(string(body)))
+	if err != nil {
+		return nil
+	}
+	baseURL, err := url.Parse(targetURL)
+	if err != nil {
+		return nil
+	}
+	return cs.extractLinks(doc, baseURL)
+}
+
+// Add helper to render a node as HTML snippet
+func renderNodeSnippet(n *html.Node) string {
+	var b strings.Builder
+	html.Render(&b, n)
+	return b.String()
 }
