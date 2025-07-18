@@ -16,11 +16,23 @@ export interface URLAnalysis {
   internal_links?: number;
   external_links?: number;
   broken_links?: number;
+  inbound_internal_links?: number;
+  is_orphan?: boolean;
   has_login_form?: boolean;
   error_message?: string;
   started_at?: string;
   completed_at?: string;
   created_at: string;
+  meta_title?: string;
+  meta_description?: string;
+  canonical?: string;
+  images_missing_alt?: string[];
+  has_jsonld?: boolean;
+  has_microdata?: boolean;
+  has_rdfa?: boolean;
+  jsonld_snippet?: string;
+  microdata_snippet?: string;
+  rdfa_snippet?: string;
 }
 
 export interface BrokenLink {

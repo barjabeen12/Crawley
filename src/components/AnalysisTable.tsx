@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   ChevronUp,
   ChevronDown,
@@ -13,6 +13,7 @@ import {
   Square,
   Play,
   Pause,
+  AlertTriangle,
 } from "lucide-react";
 import { URLAnalysis, PaginationParams } from "../types";
 
@@ -58,7 +59,6 @@ export const AnalysisTable = ({
     const newOrder = sortBy === column && sortOrder === "asc" ? "desc" : "asc";
     setSortBy(column);
     setSortOrder(newOrder);
-
     onPageChange({
       page: pagination.page,
       limit: pagination.limit,
@@ -135,7 +135,6 @@ export const AnalysisTable = ({
       error: "bg-red-500/20 text-red-600 border-red-500/30",
       stopped: "bg-gray-500/20 text-gray-600 border-gray-500/30",
     };
-
     return (
       <span
         className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${
@@ -161,7 +160,6 @@ export const AnalysisTable = ({
 
   const getActionButton = (analysis: URLAnalysis) => {
     const isActionLoading = actionLoading[analysis.id];
-
     if (analysis.status === "running") {
       return (
         <button
@@ -174,7 +172,6 @@ export const AnalysisTable = ({
         </button>
       );
     }
-
     if (
       analysis.status === "stopped" ||
       analysis.status === "error" ||
@@ -195,7 +192,6 @@ export const AnalysisTable = ({
         </button>
       );
     }
-
     return null;
   };
 
@@ -204,200 +200,159 @@ export const AnalysisTable = ({
   ).length;
 
   return (
-    <div className="bg-card/50 backdrop-blur-sm rounded-2xl border border-white/10 overflow-hidden rounded-xl p-8 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow duration-300">
+    <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-slate-900 dark:to-blue-950 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-x-auto p-0 sm:p-4 transition-all duration-300">
       {/* Header with search and filters */}
-      <div className="p-6 border-b border-border/50">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search URLs..."
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background/50 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-              />
-            </div>
-
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors"
-            >
-              <Filter className="w-4 h-4" />
-              Filters
-            </button>
-
-            {/* Polling indicator */}
-            {isPolling && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-600 border border-blue-500/30">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">
-                  Auto-refreshing ({runningJobsCount} running)
-                </span>
-              </div>
-            )}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 rounded-t-3xl">
+        <div className="flex items-center gap-4 flex-1">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search URLs..."
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-background/50 focus:outline-none focus:ring-2 focus:ring-purple-400/50 text-slate-700 dark:text-slate-200"
+            />
           </div>
-
-          {selectedIds.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                {selectedIds.length} selected
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-purple-200 dark:border-purple-700 bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900 dark:to-blue-900 text-purple-700 dark:text-purple-200 hover:bg-purple-200/60 transition-colors shadow"
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+          </button>
+          {isPolling && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-600 border border-blue-500/30">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">
+                Auto-refreshing ({runningJobsCount} running)
               </span>
-              <button
-                onClick={() => onBulkAction("rerun", selectedIds)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-colors"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Rerun
-              </button>
-              <button
-                onClick={() => onBulkAction("delete", selectedIds)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
             </div>
           )}
         </div>
-
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t border-border/50">
-            <div className="flex gap-4">
-              <select
-                value={statusFilter}
-                onChange={(e) => handleStatusFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-border bg-background/50 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-              >
-                <option value="">All Status</option>
-                <option value="queued">Queued</option>
-                <option value="running">Running</option>
-                <option value="completed">Completed</option>
-                <option value="error">Error</option>
-                <option value="stopped">Stopped</option>
-              </select>
-            </div>
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500 dark:text-slate-300">
+              {selectedIds.length} selected
+            </span>
+            <button
+              onClick={() => onBulkAction("rerun", selectedIds)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" /> Rerun
+            </button>
+            <button
+              onClick={() => onBulkAction("delete", selectedIds)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </button>
           </div>
         )}
       </div>
-
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-muted/30">
+        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+          <thead className="bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900">
             <tr>
-              <th className="p-4 text-left">
-                <button
-                  onClick={handleSelectAll}
-                  className="flex items-center justify-center w-5 h-5"
-                >
-                  {selectedIds.length === analyses.length &&
-                  analyses.length > 0 ? (
-                    <CheckSquare className="w-4 h-4" />
-                  ) : (
-                    <Square className="w-4 h-4" />
-                  )}
-                </button>
+              <th className="px-4 py-3 text-left font-bold text-slate-700 dark:text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.length === analyses.length && analyses.length > 0}
+                  onChange={handleSelectAll}
+                  className="accent-purple-500 w-4 h-4 rounded"
+                />
               </th>
-              <th className="p-4 text-left">
-                <button
-                  onClick={() => handleSort("title")}
-                  className="flex items-center gap-2 font-medium hover:text-purple-400 transition-colors"
-                >
-                  Title {getSortIcon("title")}
-                </button>
+              <th
+                className="px-4 py-3 text-left font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none"
+                onClick={() => handleSort("url")}
+              >
+                URL {getSortIcon("url")}
               </th>
-              <th className="p-4 text-left">
-                <button
-                  onClick={() => handleSort("htmlVersion")}
-                  className="flex items-center gap-2 font-medium hover:text-purple-400 transition-colors"
-                >
-                  HTML Version {getSortIcon("htmlVersion")}
-                </button>
+              <th
+                className="px-4 py-3 text-left font-bold text-slate-700 dark:text-slate-200 cursor-pointer select-none"
+                onClick={() => handleSort("status")}
+              >
+                Status {getSortIcon("status")}
               </th>
-              <th className="p-4 text-left">
-                <button
-                  onClick={() => handleSort("internalLinks")}
-                  className="flex items-center gap-2 font-medium hover:text-purple-400 transition-colors"
-                >
-                  Internal Links {getSortIcon("internalLinks")}
-                </button>
-              </th>
-              <th className="p-4 text-left">
-                <button
-                  onClick={() => handleSort("externalLinks")}
-                  className="flex items-center gap-2 font-medium hover:text-purple-400 transition-colors"
-                >
-                  External Links {getSortIcon("externalLinks")}
-                </button>
-              </th>
-              <th className="p-4 text-left">Status</th>
-              <th className="p-4 text-left">Actions</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700 dark:text-slate-200">Title</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700 dark:text-slate-200">Links</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700 dark:text-slate-200">Broken</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700 dark:text-slate-200">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
             {loading ? (
               <tr>
-                <td colSpan={7} className="p-8 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Loading analyses...
-                  </div>
+                <td colSpan={7} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  Loading analyses...
                 </td>
               </tr>
             ) : analyses.length === 0 ? (
               <tr>
-                <td
-                  colSpan={7}
-                  className="p-8 text-center text-muted-foreground"
-                >
-                  No analyses found. Add a URL to get started.
+                <td colSpan={7} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                  No analyses found. Add a URL to get started!
                 </td>
               </tr>
             ) : (
               analyses.map((analysis) => (
                 <tr
                   key={analysis.id}
-                  className="border-b border-border/50 hover:bg-muted/20 transition-colors"
+                  className={`transition-all duration-200 hover:bg-blue-50 dark:hover:bg-blue-900/20 ${selectedIds.includes(analysis.id) ? 'bg-purple-50 dark:bg-purple-900/20' : ''}`}
                 >
-                  <td className="p-4">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(analysis.id)}
+                      onChange={() => handleSelectRow(analysis.id)}
+                      className="accent-purple-500 w-4 h-4 rounded"
+                    />
+                  </td>
+                  <td className="px-4 py-3 max-w-xs truncate">
                     <button
-                      onClick={() => handleSelectRow(analysis.id)}
-                      className="flex items-center justify-center w-5 h-5"
+                      className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                      onClick={() => onViewDetails(analysis.id)}
                     >
-                      {selectedIds.includes(analysis.id) ? (
-                        <CheckSquare className="w-4 h-4" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
+                      {analysis.url}
                     </button>
                   </td>
-                  <td className="p-4">
-                    <div>
-                      <div className="font-medium">
-                        {analysis.page_title || "Untitled"}
-                      </div>
-                      <div className="text-sm text-muted-foreground truncate max-w-xs">
-                        {analysis.url}
-                      </div>
-                    </div>
+                  <td className="px-4 py-3">
+                    {getStatusBadge(analysis.status)}
                   </td>
-                  <td className="p-4">{analysis.html_version}</td>
-                  <td className="p-4">{analysis.internal_links}</td>
-                  <td className="p-4">{analysis.external_links}</td>
-                  <td className="p-4">{getStatusBadge(analysis.status)}</td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      {getActionButton(analysis)}
-                      <button
-                        onClick={() => onViewDetails(analysis.id)}
-                        className="flex items-center gap-2 px-3 py-1 rounded-lg hover:bg-accent transition-colors"
-                      >
-                        <Eye className="w-4 h-4" />
-                        View
-                      </button>
-                    </div>
+                  <td className="px-4 py-3 max-w-xs truncate">
+                    {analysis.page_title || <span className="text-slate-400 italic">N/A</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-300 font-semibold">
+                      {analysis.internal_links}
+                    </span>
+                    <span className="mx-1 text-slate-400">/</span>
+                    <span className="inline-flex items-center gap-1 text-purple-500 dark:text-purple-300 font-semibold">
+                      {analysis.external_links}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {analysis.broken_links > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-red-600 font-semibold">
+                        <AlertTriangle className="w-4 h-4" />
+                        {analysis.broken_links}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-green-600 font-semibold">
+                        <CheckSquare className="w-4 h-4" />
+                        0
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 flex flex-wrap gap-2">
+                    <button
+                      className="flex items-center gap-1 px-3 py-1 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold shadow hover:from-blue-600 hover:to-purple-600 transition-all"
+                      onClick={() => onViewDetails(analysis.id)}
+                    >
+                      <Eye className="w-4 h-4" /> View
+                    </button>
+                    {getActionButton(analysis)}
                   </td>
                 </tr>
               ))
@@ -405,61 +360,28 @@ export const AnalysisTable = ({
           </tbody>
         </table>
       </div>
-
       {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="p-4 border-t border-border/50 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
-            {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
-            {pagination.total} results
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                onPageChange({
-                  ...{
-                    page: pagination.page - 1,
-                    limit: pagination.limit,
-                    sortBy,
-                    sortOrder,
-                  },
-                  search: search || undefined,
-                  filters: statusFilter ? { status: statusFilter } : undefined,
-                })
-              }
-              disabled={pagination.page <= 1}
-              className="px-3 py-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Previous
-            </button>
-
-            <span className="px-4 py-2">
-              Page {pagination.page} of {pagination.totalPages}
-            </span>
-
-            <button
-              onClick={() =>
-                onPageChange({
-                  ...{
-                    page: pagination.page + 1,
-                    limit: pagination.limit,
-                    sortBy,
-                    sortOrder,
-                  },
-                  search: search || undefined,
-                  filters: statusFilter ? { status: statusFilter } : undefined,
-                })
-              }
-              disabled={pagination.page >= pagination.totalPages}
-              className="px-3 py-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-            </button>
-          </div>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 rounded-b-3xl">
+        <div className="text-slate-500 dark:text-slate-300 text-sm">
+          Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total analyses)
         </div>
-      )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onPageChange({ ...pagination, page: Math.max(1, pagination.page - 1) })}
+            disabled={pagination.page === 1}
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900 dark:to-blue-900 text-purple-700 dark:text-purple-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => onPageChange({ ...pagination, page: Math.min(pagination.totalPages, pagination.page + 1) })}
+            disabled={pagination.page === pagination.totalPages}
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 text-blue-700 dark:text-blue-200 font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

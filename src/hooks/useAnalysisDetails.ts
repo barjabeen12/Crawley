@@ -8,6 +8,7 @@ interface AnalysisDetailsResponse {
 
 export const useAnalysisDetails = (id: string) => {
   const [analysis, setAnalysis] = useState<URLAnalysis | null>(null);
+  const [brokenLinks, setBrokenLinks] = useState<BrokenLink[]>([]);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,7 @@ const API_BASE_URL = 'http://localhost:8081/api';
 
       const result: AnalysisDetailsResponse = await response.json();
       setAnalysis(result.job);
+      setBrokenLinks(result.broken_links || []);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch analysis');
@@ -65,5 +67,6 @@ const API_BASE_URL = 'http://localhost:8081/api';
     analysis, 
     loading, 
     error, 
+    brokenLinks,
   };
 };

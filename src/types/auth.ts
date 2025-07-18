@@ -3,6 +3,9 @@ export interface User {
   id: string;
   email: string;
   createdAt: string;
+  firstName?: string;
+  lastName?: string;
+  subscription?: string;
 }
 
 export interface LoginRequest {

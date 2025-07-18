@@ -1,5 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, AuthContextType, LoginRequest, RegisterRequest } from '../types/auth';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  User,
+  AuthContextType,
+  LoginRequest,
+  RegisterRequest,
+} from '../types/auth';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -11,10 +23,35 @@ export const useAuth = () => {
   return context;
 };
 
+// UI Settings Context
+interface UISettingsContextType {
+  autoStart: boolean;
+  setAutoStart: (value: boolean) => void;
+}
+const UISettingsContext = createContext<UISettingsContextType | undefined>(undefined);
+export const useUISettings = () => {
+  const context = useContext(UISettingsContext);
+  if (!context) throw new Error('useUISettings must be used within UISettingsProvider');
+  return context;
+};
+export const UISettingsProvider = ({ children }: { children: ReactNode }) => {
+  const [autoStart, setAutoStart] = useState(() => {
+    const stored = localStorage.getItem('autoStart');
+    return stored ? stored === 'true' : true;
+  });
+  useEffect(() => {
+    localStorage.setItem('autoStart', autoStart.toString());
+  }, [autoStart]);
+  return (
+    <UISettingsContext.Provider value={{ autoStart, setAutoStart }}>
+      {children}
+    </UISettingsContext.Provider>
+  );
+};
+
 interface AuthProviderProps {
   children: ReactNode;
 }
-
 
 const API_BASE_URL = 'http://localhost:8081/api';
 
@@ -22,17 +59,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate(); // navigation hook
 
   useEffect(() => {
- 
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
-    
+
     if (storedToken && storedUser) {
       setToken(storedToken);
       setUser(JSON.parse(storedUser));
     }
-    
+
     setLoading(false);
   }, []);
 
@@ -45,7 +82,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: credentials.email, 
+          username: credentials.email,
           password: credentials.password,
         }),
       });
@@ -56,19 +93,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       const data = await response.json();
-      
-     
       const user: User = {
-        id: data.api_key, 
-        email: credentials.email,
+        id: data.user.id?.toString(),
+        email: data.user.email,
         createdAt: new Date().toISOString(),
+        firstName: data.user.firstName,
+        lastName: data.user.lastName,
+        subscription: data.user.subscription,
       };
-      
+
       setUser(user);
       setToken(data.token);
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(user));
-      localStorage.setItem('apiKey', data.api_key); 
+      localStorage.setItem('apiKey', data.api_key);
+
+      navigate('/'); 
 
     } catch (error) {
       console.error('Login error:', error);
@@ -87,8 +127,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: data.email, 
+          username: data.email,
           password: data.password,
+          firstName: data.firstName,
+          lastName: data.lastName,
         }),
       });
 
@@ -98,18 +140,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       const responseData = await response.json();
-      
-     
       const user: User = {
-        id: responseData.api_key,
-        email: data.email,
+        id: responseData.user.id?.toString() ?? responseData.api_key,
+        email: responseData.user.email ?? data.email,
         createdAt: new Date().toISOString(),
+        firstName: responseData.user.firstName,
+        lastName: responseData.user.lastName,
+        subscription: responseData.user.subscription,
       };
-      
+
       setUser(user);
-     
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('apiKey', responseData.api_key);
+
+      navigate('/'); 
 
     } catch (error) {
       console.error('Registration error:', error);
@@ -125,6 +169,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('apiKey');
+    navigate('/'); 
   };
 
   const value = {
